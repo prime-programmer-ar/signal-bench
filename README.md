@@ -1,5 +1,7 @@
 # Signal Bench
 
+**🚀 Live Demo: [https://prime-programmer-ar.github.io/signal-bench/](https://prime-programmer-ar.github.io/signal-bench/)**
+
 Signal Bench is an interactive input laboratory designed as a single-page HTML application. It explores how various real-time input channels—keyboard, pointer, voice, eye tracking, and gamepads—can harmoniously drive a unified, aesthetic visual stage.
 
 ## Features
