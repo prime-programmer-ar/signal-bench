@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Bench — Interactive Input Lab</title>
+<meta name="description" content="A single-page input laboratory: keyboard, pointer and voice signals drive one live stage.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+
+  /* ============================================================
+     CHANNEL 04 — EYE TRACKING
+     ============================================================ */
+  var gazeActive = false;
+  el.eyeBtn.addEventListener('click', async function() {
+    if (gazeActive) {
+      if (window.webgazer) {
+        window.webgazer.pause();
+        window.webgazer.showVideoPreview(false);
+        window.webgazer.showPredictionPoints(false);
+      }
+      gazeActive = false;
+      state.eyeOn = false;
+      el.eyeStatus.textContent = 'OFF';
+      el.eyeLive.textContent = 'cam off';
+      el.eyeBtn.textContent = 'ENABLE CAM';
+      log('EYE', 'gaze tracking paused');
+      setMicUI(state.micOn ? 'listening' : 'off');
+      return;
+    }
+    
+    if (!window.webgazer) {
+      log('EYE', 'webgazer not loaded');
+      return;
+    }
+
+    try {
+      el.eyeStatus.textContent = 'INIT...';
+      await window.webgazer.setRegression('ridge')
+        .setGazeListener(function(data, elapsedTime) {
+          if (data == null) return;
+          var x = data.x;
+          var y = data.y;
+          
+          el.eyePos.textContent = Math.round(x) + ' , ' + Math.round(y);
+          
+          var padRect = el.eyePad.getBoundingClientRect();
+          var px = (x / window.innerWidth) * 100;
+          var py = (y / window.innerHeight) * 100;
+          el.eyeDot.style.left = px + '%';
+          el.eyeDot.style.top = py + '%';
+          
+          if (Math.random() < 0.03) {
+             var local = stageLocal(x, y);
+             if (local.inside) {
+                stage.ripple(local.x, local.y);
+             }
+          }
+          pulseLamp(el.lampEye, 100);
+        })
+        .begin();
+        
+      window.webgazer.showVideoPreview(false).showPredictionPoints(false);
+      gazeActive = true;
+      state.eyeOn = true;
+      el.eyeStatus.textContent = 'TRACKING';
+      el.eyeLive.textContent = 'cam active';
+      el.eyeBtn.textContent = 'DISABLE CAM';
+      log('EYE', 'gaze tracking started');
+      flash('EYE TRACKING ON');
+    } catch(err) {
+      console.error(err);
+      el.eyeStatus.textContent = 'ERROR';
+      log('EYE', 'failed to init webgazer');
+    }
+  });
+
+  /* ============================================================
+     CHANNEL 05 — GAMEPAD
+     ============================================================ */
+  window.addEventListener("gamepadconnected", (e) => {
+    state.gpActive = true;
+    el.gpLive.textContent = e.gamepad.id.substring(0, 15) + '...';
+    log('PAD', 'gamepad connected: ' + e.gamepad.id);
+    flash('GAMEPAD CONNECTED');
+  });
+
+  window.addEventListener("gamepaddisconnected", (e) => {
+    state.gpActive = false;
+    el.gpLive.textContent = 'disconnected';
+    log('PAD', 'gamepad disconnected');
+  });
+
+  /* ============================================================
+   SIGNAL BENCH · design tokens
+   Palette territory: warm instrument bench — charcoal, warm paper
+   ink, signal amber. No default indigo/purple, no stock gradients.
+   ============================================================ */
+:root {
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --accent-h: 36;              /* signal amber — voice commands retune this */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html[data-theme="dark"] {
+  --bg: #0f0d0a;
+  --panel: #16130e;
+  --panel-2: #1c1811;
+  --ink: #ece3d0;
+  --ink-dim: #a89e88;
+  --mut: #7d7460;
+  --line: rgba(236, 227, 208, 0.14);
+  --line-soft: rgba(236, 227, 208, 0.07);
+  --accent: hsl(var(--accent-h) 92% 60%);
+  --accent-deep: hsl(var(--accent-h) 80% 48%);
+  --accent-soft: hsl(var(--accent-h) 92% 60% / 0.14);
+  --accent-ink: #14110b;       /* text on accent fills */
+  --grid: hsl(var(--accent-h) 80% 60% / 0.06);
+}
+
+html[data-theme="light"] {
+  --bg: #f2eee3;
+  --panel: #faf7ee;
+  --panel-2: #efeadb;
+  --ink: #221d13;
+  --ink-dim: #57503f;
+  --mut: #6e6550;
+  --line: rgba(34, 29, 19, 0.18);
+  --line-soft: rgba(34, 29, 19, 0.09);
+  --accent: hsl(var(--accent-h) 85% 42%);
+  --accent-deep: hsl(var(--accent-h) 80% 34%);
+  --accent-soft: hsl(var(--accent-h) 85% 42% / 0.12);
+  --accent-ink: #fdfaf2;
+  --grid: hsl(var(--accent-h) 60% 35% / 0.09);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* ---------- pointer spotlight (mouse → page glow) ---------- */
+#spot {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 2;                 /* washes over panels like a bench light */
+  background: radial-gradient(
+    620px circle at var(--mx, 50vw) var(--my, 42vh),
+    hsl(var(--accent-h) 92% 60% / 0.07),
+    transparent 66%
+  );
+  opacity: 1;
+  transition: opacity 600ms ease;
+}
+body.pointer-idle #spot { opacity: 0; }
+html[data-theme="light"] #spot {
+  background: radial-gradient(
+    620px circle at var(--mx, 50vw) var(--my, 42vh),
+    hsl(var(--accent-h) 85% 42% / 0.06),
+    transparent 66%
+  );
+}
+
+.bench {
+  position: relative;
+  z-index: 1;
+  max-width: 1460px;
+  margin: 0 auto;
+  padding: 22px clamp(14px, 3vw, 36px) 44px;
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(26px, 3.6vw, 42px);
+  letter-spacing: 0.015em;
+  line-height: 1;
+}
+.brand h1 em {
+  font-style: normal;
+  color: var(--accent);
+}
+.brand .tag {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--mut);
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.brand-sub {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.lamp {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 10px; letter-spacing: 0.16em; color: var(--mut);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+.lamp i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--line);
+  transition: background 100ms linear, box-shadow 100ms linear;
+}
+.lamp.on { color: var(--ink); border-color: var(--accent); }
+.lamp.on i { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+.btn {
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease),
+              background 120ms var(--ease);
+}
+.btn:hover { color: var(--ink); border-color: var(--accent); }
+.btn:focus-visible, .icon-btn:focus-visible, .cmd:focus-visible,
+.cap:focus-visible, .mic-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn svg, .icon-btn svg { display: block; }
+
+.icon-btn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease);
+}
+.icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.icon-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* ============================================================
+   MAIN GRID
+   ============================================================ */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.72fr) minmax(330px, 1fr);
+  gap: 18px;
+  margin-top: 20px;
+  align-items: start;
+}
+.rail { display: grid; gap: 18px; }
+
+@media (max-width: 1040px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   STAGE (the oscilloscope)
+   ============================================================ */
+.stage-wrap {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+  min-height: clamp(380px, 58vh, 660px);
+}
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.stage-hud {
+  position: absolute; top: 14px; left: 16px;
+  display: flex; align-items: center; gap: 10px;
+  pointer-events: none;
+}
+.stage-hud .src-tag {
+  font-size: 10px; letter-spacing: 0.18em;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-weight: 600;
+}
+.stage-hud .last-event {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(15px, 1.6vw, 19px);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flash {
+  position: absolute; left: 50%; top: 42%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(20px, 3vw, 36px);
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+}
+.flash.show { animation: flashIn 900ms var(--ease) forwards; }
+@keyframes flashIn {
+  0%   { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+  16%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -56%) scale(1.02); }
+}
+
+.stage-foot {
+  position: absolute; left: 16px; right: 16px; bottom: 12px;
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: 10px; letter-spacing: 0.14em;
+  color: var(--mut);
+  pointer-events: none;
+  flex-wrap: wrap;
+}
+.stage-foot b { color: var(--ink-dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   MODULES
+   ============================================================ */
+.module {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 15px 16px 17px;
+}
+.module-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px;
+  margin-bottom: 13px;
+}
+.module-title {
+  display: flex; align-items: baseline; gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  transition: color 150ms var(--ease);
+}
+.module-title .idx { color: var(--accent); font-variant-numeric: tabular-nums; }
+.module:hover .module-title { color: var(--ink); }
+.module-head .live {
+  font-size: 10px; letter-spacing: 0.12em;
+  color: var(--mut);
+  font-variant-numeric: tabular-nums;
+  max-width: 55%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---------- keyboard module ---------- */
+.caps { display: flex; flex-direction: column; gap: 6px; }
+.caps .row { display: flex; gap: 6px; }
+.cap {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 37px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: default;
+  user-select: none;
+  transition: transform 80ms var(--ease), background 80ms var(--ease),
+              color 80ms var(--ease), border-color 80ms var(--ease);
+}
+.cap.wide { flex: 2.3 1 0; font-size: 10px; letter-spacing: 0.14em; }
+.cap.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  transform: translateY(2px);
+}
+.caps.shifted .cap:not(.wide) { text-transform: uppercase; color: var(--ink); }
+.caps.shifted .cap[data-key="shift"],
+.caps.capslock .cap:not(.wide) { border-color: var(--accent); color: var(--accent); }
+
+.tape {
+  display: flex; gap: 6px; flex-wrap: nowrap;
+  overflow: hidden;
+  margin-top: 12px;
+  min-height: 25px;
+  align-items: center;
+}
+.tape .placeholder { font-size: 11px; color: var(--mut); }
+.tape .chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  color: var(--ink);
+  animation: chipIn 160ms var(--ease);
+  background: var(--panel-2);
+}
+@keyframes chipIn {
+  from { transform: translateY(4px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 13px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.stat b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.stat span {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--mut);
+  text-transform: uppercase;
+}
+.mod-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.mod-pill {
+  font-size: 10px; letter-spacing: 0.14em;
+  color: var(--mut);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: default;
+  transition: color 100ms linear, border-color 100ms linear;
+}
+.mod-pill.on { color: var(--accent); border-color: var(--accent); }
+.mod-note { font-size: 10.5px; color: var(--mut); margin-left: auto; }
+
+/* ---------- pointer module ---------- */
+.duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.readout { display: grid; gap: 10px; align-content: start; }
+.kv {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1px dashed var(--line-soft);
+  padding-bottom: 5px;
+  font-size: 12px;
+}
+.kv span { color: var(--mut); font-size: 10px; letter-spacing: 0.14em; }
+.kv b { font-weight: 500; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+.meter {
+  height: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.meter i {
+  display: block; height: 100%; width: 0%;
+  background: var(--accent);
+  transition: width 90ms linear;
+}
+
+.pad {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  overflow: hidden;
+  min-height: 132px;
+}
+.pad::before, .pad::after {
+  content: "";
+  position: absolute;
+  background: var(--line-soft);
+}
+.pad::before { left: 0; right: 0; top: 50%; height: 1px; }
+.pad::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+.pad-dot {
+  position: absolute;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  left: 50%; top: 50%;
+  transition: left 60ms linear, top 60ms linear;
+}
+.pad-dot.clicking { animation: dotPop 260ms var(--ease); }
+@keyframes dotPop {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  100% { box-shadow: 0 0 0 16px transparent; }
+}
+
+/* ---------- voice module ---------- */
+.mic-row { display: flex; gap: 13px; align-items: center; }
+.mic-btn {
+  width: 48px; height: 48px; flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease), color 150ms var(--ease);
+}
+.mic-btn:hover { border-color: var(--accent); color: var(--accent); }
+.mic-btn.on {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  animation: micPulse 1.8s ease-out infinite;
+}
+@keyframes micPulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  100% { box-shadow: 0 0 0 18px transparent; }
+}
+.mic-state {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+.mic-hint { font-size: 11px; color: var(--mut); margin-top: 2px; }
+
+.voice-viz { margin-top: 13px; display: grid; gap: 9px; }
+#spectrum { width: 100%; height: 46px; display: block; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+
+.transcript {
+  min-height: 21px;
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.transcript:empty::before { content: "—"; color: var(--mut); }
+.transcript .interim { color: var(--mut); font-style: italic; }
+
+.cmds-label {
+  font-size: 9.5px; letter-spacing: 0.18em; color: var(--mut);
+  text-transform: uppercase;
+  margin: 13px 0 8px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmd {
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: color 110ms var(--ease), border-color 110ms var(--ease), background 110ms var(--ease);
+}
+.cmd:hover { color: var(--accent); border-color: var(--accent); }
+.cmd:active { background: var(--accent-soft); }
+
+/* ---------- log module ---------- */
+.log {
+  list-style: none;
+  margin: 0; padding: 0;
+  max-height: 218px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.log::-webkit-scrollbar { width: 6px; }
+.log::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.log li {
+  display: flex; gap: 10px;
+  padding: 4.5px 2px;
+  border-bottom: 1px dashed var(--line-soft);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  animation: chipIn 150ms var(--ease);
+}
+.log time { color: var(--mut); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.log .src {
+  flex: 0 0 3.6em;
+  font-size: 9.5px; letter-spacing: 0.12em;
+  color: var(--accent);
+  padding-top: 2px;
+  text-transform: uppercase;
+}
+.log .msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-empty { color: var(--mut); font-size: 11.5px; padding: 6px 0; }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.foot {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--mut);
+}
+.foot kbd {
+  font-family: inherit;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0 6px;
+  color: var(--ink-dim);
+}
+
+noscript .warn {
+  display: block;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  margin: 18px 0;
+}
+
+/* ============================================================
+   ENTRANCE (one choreographed pass) + REDUCED MOTION
+   ============================================================ */
+.rise { opacity: 0; animation: riseIn 0.55s var(--ease) forwards; }
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.16s; }
+.rise-3 { animation-delay: 0.27s; }
+.rise-4 { animation-delay: 0.38s; }
+.rise-5 { animation-delay: 0.49s; }
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+body[data-motion="off"] * {
+  animation: none !important;
+  transition: none !important;
+}
+body[data-motion="off"] .rise { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  .rise { opacity: 1; }
+}
+
+/* small screens */
+@media (max-width: 560px) {
+  .duo { grid-template-columns: 1fr; }
+  .stage-hud .last-event { max-width: 62vw; }
+}
+</style>
+  <script src="https://cdn.jsdelivr.net/npm/webgazer/dist/webgazer.min.js"></script>
+</head>
+<body data-motion="on">
+<noscript>
+  <div class="warn"><strong>JavaScript is off.</strong> Signal Bench is a live input
+  laboratory — the keyboard, pointer and voice demonstrations all need JavaScript to run.</div>
+</noscript>
+
+<div id="spot" aria-hidden="true"></div>
+
+<div class="bench">
+
+  <!-- ================= TOP BAR ================= -->
+  <header class="topbar" data-section="header">
+    <div class="brand">
+      <h1 class="rise rise-1">SIGNAL<em>·</em>BENCH</h1>
+      <span class="tag rise rise-1">Input Lab&nbsp;v1.0</span>
+      <p class="brand-sub rise rise-2">Three input channels — keyboard, pointer, voice — feeding one live stage. Everything you type, move, click or say changes this page.</p>
+    </div>
+
+    <div class="controls rise rise-2">
+      <span class="lamp" id="lamp-kbd" title="Keyboard activity"><i></i>KBD</span>
+      <span class="lamp" id="lamp-ptr" title="Pointer activity"><i></i>PTR</span>
+      <span class="lamp" id="lamp-vox" title="Voice activity"><i></i>VOX</span>
+      <span class="lamp" id="lamp-eye" title="Eye Tracking activity"><i></i>EYE</span>
+      <span class="lamp" id="lamp-pad" title="Gamepad activity"><i></i>PAD</span>
+
+      <button class="icon-btn" id="motion-btn" aria-pressed="true" aria-label="Toggle stage motion" title="Toggle stage motion">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M2 12h3l2.5-7 4 14 3-9 2 2h5.5"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="theme-btn" aria-label="Toggle light and dark theme" title="Toggle theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5"/>
+          <path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN GRID ================= -->
+  <main class="grid">
+
+    <!-- ---------- STAGE ---------- -->
+    <section class="stage-wrap rise rise-2" data-section="stage" aria-label="Live input stage">
+      <canvas id="stage" aria-hidden="true"></canvas>
+
+      <div class="stage-hud">
+        <span class="src-tag" id="hud-src">SYS</span>
+        <span class="last-event" id="hud-event">bench ready — awaiting input</span>
+      </div>
+
+      <div class="flash" id="flash" role="status" aria-live="polite"></div>
+
+      <div class="stage-foot">
+        <span>KEYS <b id="foot-keys">0</b>&ensp;·&ensp;CLICKS <b id="foot-clicks">0</b>&ensp;·&ensp;COMMANDS <b id="foot-cmds">0</b></span>
+        <span><kbd>ESC</kbd> clears the stage</span>
+      </div>
+    </section>
+
+    <!-- ---------- RIGHT RAIL ---------- -->
+    <div class="rail">
+
+      <!-- KEYBOARD -->
+      <section class="module rise rise-3" data-section="keyboard" aria-label="Keyboard instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">01</span>KEYBOARD</h2>
+          <span class="live" id="kb-live">last key —</span>
+        </div>
+
+        <div class="caps" id="caps" aria-hidden="true"></div>
+
+        <div class="tape" id="tape" aria-label="Recent keystrokes">
+          <span class="placeholder">type anywhere — the bench is always listening</span>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><b id="kb-total">0</b><span>total keys</span></div>
+          <div class="stat"><b id="kb-kpm">0</b><span>keys / min</span></div>
+          <div class="stat"><b id="kb-last">—</b><span>last key</span></div>
+        </div>
+
+        <div class="mod-row">
+          <span class="mod-pill" id="pill-shift">SHIFT</span>
+          <span class="mod-pill" id="pill-caps">CAPS</span>
+          <span class="mod-note">every key fires a glyph burst on stage</span>
+        </div>
+      </section>
+
+      <!-- POINTER -->
+      <section class="module rise rise-4" data-section="pointer" aria-label="Pointer instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">02</span>POINTER</h2>
+          <span class="live" id="pt-live">0 px/s</span>
+        </div>
+
+        <div class="duo">
+          <div class="readout">
+            <div class="kv"><span>POSITION</span><b id="pt-pos">0 , 0</b></div>
+            <div class="kv"><span>VELOCITY</span><b id="pt-vel">0 px/s</b></div>
+            <div class="kv"><span>CLICKS</span><b id="pt-clicks">0</b></div>
+            <div>
+              <div class="meter" role="meter" aria-label="Pointer velocity" aria-valuemin="0" aria-valuemax="3000" aria-valuenow="0" id="pt-meter"><i></i></div>
+            </div>
+          </div>
+          <div class="pad" aria-hidden="true">
+            <span class="pad-dot" id="pad-dot"></span>
+          </div>
+        </div>
+
+        <div class="mod-row">
+          <span class="mod-note">movement drives the page glow + stage trail · clicks ripple</span>
+        </div>
+      </section>
+
+      <!-- VOICE -->
+      <section class="module rise rise-4" data-section="voice" aria-label="Voice instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">03</span>VOICE</h2>
+          <span class="live" id="vx-live">mic off</span>
+        </div>
+
+        <div class="mic-row">
+          <button class="mic-btn" id="mic-btn" aria-pressed="false" aria-label="Enable microphone">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/>
+            </svg>
+          </button>
+          <div>
+            <div class="mic-state" id="mic-state">MIC OFF</div>
+            <div class="mic-hint" id="mic-hint">enable the mic — volume drives the orb, speech runs commands</div>
+          </div>
+        </div>
+
+        <div class="voice-viz">
+          <canvas id="spectrum" aria-hidden="true"></canvas>
+          <div class="meter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="vx-meter"><i></i></div>
+          <p class="transcript" id="transcript" aria-live="polite"></p>
+        </div>
+
+        <p class="cmds-label" id="cmds-label">Voice commands — speak or click</p>
+        <div class="chips" id="chips" role="group" aria-labelledby="cmds-label"></div>
+      </section>
+
+            <!-- EYE TRACKING -->
+      <section class="module rise rise-4" data-section="vision" aria-label="Vision instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">04</span>VISION</h2>
+          <span class="live" id="eye-live">cam off</span>
+        </div>
+
+        <div class="duo">
+          <div class="readout">
+            <div class="kv"><span>GAZE X,Y</span><b id="eye-pos">— , —</b></div>
+            <div class="kv"><span>STATUS</span><b id="eye-status">OFF</b></div>
+            <div style="margin-top:8px;">
+              <button class="btn" id="eye-btn">ENABLE CAM</button>
+            </div>
+          </div>
+          <div class="pad" aria-hidden="true" id="eye-pad" style="display:flex;justify-content:center;align-items:center;">
+             <span class="pad-dot" id="eye-dot"></span>
+          </div>
+        </div>
+
+        <div class="mod-row">
+          <span class="mod-note">look around the screen to drive the gaze dot</span>
+        </div>
+      </section>
+
+      <!-- GAMEPAD -->
+      <section class="module rise rise-4" data-section="gamepad" aria-label="Gamepad instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">05</span>GAMEPAD</h2>
+          <span class="live" id="gp-live">disconnected</span>
+        </div>
+        <div class="duo">
+          <div class="readout">
+            <div class="kv"><span>AXIS X,Y</span><b id="gp-axes">0 , 0</b></div>
+            <div class="kv"><span>BUTTONS</span><b id="gp-btns">0</b></div>
+            <div>
+              <div class="meter" role="meter" id="gp-meter"><i></i></div>
+            </div>
+          </div>
+          <div class="pad" aria-hidden="true">
+            <span class="pad-dot" id="gp-dot"></span>
+          </div>
+        </div>
+        <div class="mod-row">
+          <span class="mod-note">connect a controller, press any button</span>
+        </div>
+      </section>
+
+      <!-- EVENT LOG -->
+      <section class="module rise rise-5" data-section="log" aria-label="Event log">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">06</span>EVENT LOG</h2>
+          <span class="live" id="log-count">0 events</span>
+        </div>
+        <ul class="log" id="log">
+          <li class="log-empty" id="log-empty">no input captured yet — the bench is quiet</li>
+        </ul>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="foot" data-section="footer">
+    <span>Type anywhere · move the pointer · click to ripple · say “green”, “party”, “light”, “clear”…</span>
+    <span>local-only — no input leaves this page</span>
+  </footer>
+
+</div>
+<script>
+/* ============================================================
+   SIGNAL BENCH · application script
+   Channels: keyboard · pointer · voice  →  one live stage.
+   Everything runs locally; no input leaves the page.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  /* ---------- shared state ---------- */
+  var state = {
+    theme: 'dark',
+    motion: true,
+    accentH: 36,          // signal amber
+    accentName: 'AMBER',
+    party: false,
+    orbScale: 1,          // current
+    orbScaleTarget: 1,
+    keys: 0,
+    clicks: 0,
+    cmds: 0,
+    events: 0,
+    keyTimes: [],
+    micOn: false,
+    eyeOn: false,
+    gpActive: false,
+    level: 0              // smoothed mic level 0..1
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = {
+    spot: $('spot'),
+    hudSrc: $('hud-src'), hudEvent: $('hud-event'),
+    flash: $('flash'),
+    footKeys: $('foot-keys'), footClicks: $('foot-clicks'), footCmds: $('foot-cmds'),
+    lampKbd: $('lamp-kbd'), lampPtr: $('lamp-ptr'), lampVox: $('lamp-vox'), lampEye: $('lamp-eye'), lampPad: $('lamp-pad'),
+    caps: $('caps'), tape: $('tape'),
+    kbTotal: $('kb-total'), kbKpm: $('kb-kpm'), kbLast: $('kb-last'), kbLive: $('kb-live'),
+    pillShift: $('pill-shift'), pillCaps: $('pill-caps'),
+    ptPos: $('pt-pos'), ptVel: $('pt-vel'), ptClicks: $('pt-clicks'),
+    ptLive: $('pt-live'), ptMeter: $('pt-meter'), padDot: $('pad-dot'),
+    micBtn: $('mic-btn'), micState: $('mic-state'), micHint: $('mic-hint'),
+    vxLive: $('vx-live'), vxMeter: $('vx-meter'), transcript: $('transcript'),
+    chips: $('chips'),
+    eyeLive: $('eye-live'), eyePos: $('eye-pos'), eyeStatus: $('eye-status'), eyeBtn: $('eye-btn'), eyeDot: $('eye-dot'), eyePad: $('eye-pad'),
+    gpLive: $('gp-live'), gpAxes: $('gp-axes'), gpBtns: $('gp-btns'), gpMeter: $('gp-meter'), gpDot: $('gp-dot'),
+    log: $('log'), logEmpty: $('log-empty'), logCount: $('log-count'),
+    themeBtn: $('theme-btn'), motionBtn: $('motion-btn')
+  };
+  var root = document.documentElement;
+  var sessionStart = performance.now();
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ============================================================
+     LOG · FLASH · HUD · LAMPS
+     ============================================================ */
+  function sessionClock() {
+    var ms = performance.now() - sessionStart;
+    var s = Math.floor(ms / 1000);
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function log(src, msg) {
+    if (el.logEmpty) { el.logEmpty.remove(); el.logEmpty = null; }
+    var li = document.createElement('li');
+    var t = document.createElement('time');
+    t.textContent = sessionClock();
+    var s = document.createElement('span');
+    s.className = 'src'; s.textContent = src;
+    var m = document.createElement('span');
+    m.className = 'msg'; m.textContent = msg;
+    li.append(t, s, m);
+    el.log.prepend(li);
+    while (el.log.children.length > 42) el.log.lastChild.remove();
+    state.events++;
+    el.logCount.textContent = state.events + ' events';
+  }
+
+  var flashTimer = null;
+  function flash(text) {
+    el.flash.textContent = text;
+    el.flash.classList.remove('show');
+    void el.flash.offsetWidth;                    // restart CSS animation
+    el.flash.classList.add('show');
+    if (flashTimer) clearTimeout(flashTimer);
+    if (!state.motion) {                          // manual fallback when animations are off
+      el.flash.style.opacity = '1';
+      flashTimer = setTimeout(function () { el.flash.style.opacity = '0'; }, 750);
+    }
+  }
+
+  function hud(src, text) {
+    el.hudSrc.textContent = src;
+    el.hudEvent.textContent = text;
+  }
+
+  function pulseLamp(node, ms) {
+    node.classList.add('on');
+    setTimeout(function () { node.classList.remove('on'); }, ms || 240);
+  }
+
+  /* ============================================================
+     THEME · ACCENT · COMMANDS
+     ============================================================ */
+  function setTheme(mode, silent) {
+    state.theme = mode;
+    root.setAttribute('data-theme', mode);
+    if (!state.motion) drawStatic();
+    if (!silent) log('SYS', 'theme → ' + mode);
+  }
+
+  function applyAccent() {
+    root.style.setProperty('--accent-h', state.accentH.toFixed(1));
+  }
+
+  function setAccent(h, name) {
+    stopParty(true);
+    state.accentH = h;
+    state.accentName = name;
+    applyAccent();
+    if (!state.motion) drawStatic();
+  }
+
+  var partyTimer = null;
+  function startParty() {
+    if (state.party) return;
+    state.party = true;
+    partyTimer = setInterval(function () {
+      state.accentH = (state.accentH + 1.4) % 360;
+      applyAccent();
+    }, 60);
+  }
+  function stopParty(silent) {
+    if (partyTimer) { clearInterval(partyTimer); partyTimer = null; }
+    state.party = false;
+    if (!silent) { /* caller decides what to restore */ }
+  }
+
+  var COLORS = {
+    red: 4, orange: 26, amber: 36, yellow: 48, lime: 88, green: 145,
+    teal: 168, cyan: 190, blue: 214, indigo: 245, violet: 262,
+    purple: 278, pink: 322, magenta: 335
+  };
+
+  /* One router for spoken words and clicked chips alike. */
+  function runCommand(raw) {
+    var word = String(raw).toLowerCase().trim();
+    if (!word) return false;
+
+    if (COLORS[word] !== undefined) {
+      setAccent(COLORS[word], word.toUpperCase());
+      state.cmds++;
+      flash('ACCENT → ' + word.toUpperCase());
+      log('VOX', 'command: accent → ' + word);
+      updateFoot();
+      return true;
+    }
+    switch (word) {
+      case 'dark': case 'light':
+        setTheme(word);
+        state.cmds++; flash('THEME → ' + word.toUpperCase());
+        log('VOX', 'command: theme → ' + word); updateFoot(); return true;
+      case 'party': case 'dance': case 'rainbow':
+        startParty();
+        state.cmds++; flash('PARTY MODE ON');
+        log('VOX', 'command: party mode on'); updateFoot(); return true;
+      case 'calm': case 'stop':
+        stopParty(); setAccent(36, 'AMBER');
+        state.cmds++; flash('CALM RESTORED');
+        log('VOX', 'command: calm — accent restored'); updateFoot(); return true;
+      case 'clear':
+        stage.clear();
+        state.cmds++; flash('STAGE CLEARED');
+        log('VOX', 'command: stage cleared'); updateFoot(); return true;
+      case 'reset':
+        stopParty(); setAccent(36, 'AMBER');
+        state.orbScaleTarget = 1;
+        stage.clear();
+        state.cmds++; flash('BENCH RESET');
+        log('VOX', 'command: full reset'); updateFoot(); return true;
+      case 'big': case 'bigger': case 'large':
+        state.orbScaleTarget = 1.6;
+        state.cmds++; flash('ORB → BIG');
+        log('VOX', 'command: orb → big'); updateFoot(); return true;
+      case 'small': case 'smaller':
+        state.orbScaleTarget = 0.6;
+        state.cmds++; flash('ORB → SMALL');
+        log('VOX', 'command: orb → small'); updateFoot(); return true;
+      case 'normal':
+        state.orbScaleTarget = 1;
+        state.cmds++; flash('ORB → NORMAL');
+        log('VOX', 'command: orb → normal'); updateFoot(); return true;
+    }
+    return false;
+  }
+
+  function updateFoot() {
+    el.footKeys.textContent = state.keys;
+    el.footClicks.textContent = state.clicks;
+    el.footCmds.textContent = state.cmds;
+    el.kbTotal.textContent = state.keys;
+    el.ptClicks.textContent = state.clicks;
+  }
+
+  /* ============================================================
+     STAGE ENGINE — one canvas, four layers:
+     grid · ripples · pointer trace · orb + spectrum · glyph bursts
+     ============================================================ */
+  var stageWrap = document.querySelector('.stage-wrap');
+  var cv = $('stage');
+  var ctx = cv.getContext('2d');
+  var rect = { width: 0, height: 0, left: 0, top: 0 };
+  var dpr = 1;
+  var letters = [], trail = [], ripples = [];
+  var rafId = null;
+
+  function resizeStage() {
+    var r = stageWrap.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    rect = { width: r.width, height: r.height, left: r.left, top: r.top };
+    if (!state.motion) drawStatic();
+  }
+
+  function stageLocal(x, y) {
+    return { x: x - rect.left, y: y - rect.top,
+             inside: x >= rect.left && x <= rect.left + rect.width &&
+                     y >= rect.top && y <= rect.top + rect.height };
+  }
+
+  var stage = {
+    burst: function (ch) {
+      for (var i = 0; i < 3; i++) {
+        if (letters.length > 90) letters.shift();
+        letters.push({
+          ch: ch,
+          x: rect.width / 2 + (Math.random() - 0.5) * 70,
+          y: rect.height / 2 + (Math.random() - 0.5) * 70,
+          vx: (Math.random() - 0.5) * 4.4,
+          vy: -(1.6 + Math.random() * 3.4),
+          life: 1,
+          hue: (state.accentH + (Math.random() * 36 - 18) + 360) % 360
+        });
+      }
+    },
+    ripple: function (x, y) {
+      if (ripples.length > 22) ripples.shift();
+      ripples.push({ x: x, y: y, r: 6, a: 0.85 });
+    },
+    pushTrail: function (x, y) {
+      if (trail.length > 80) trail.shift();
+      trail.push({ x: x, y: y, t: performance.now() });
+    },
+    clear: function () {
+      letters.length = 0; trail.length = 0; ripples.length = 0;
+      if (!state.motion) drawStatic();
+    }
+  };
+
+  function paintScene(t, animate) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    var w = rect.width, h = rect.height;
+    var hue = state.accentH;
+    var light = state.theme === 'light';
+    var gridA = light ? 0.14 : 0.055;
+
+    /* grid */
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'hsla(' + hue + ',70%,' + (light ? 30 : 62) + '%,' + gridA + ')';
+    ctx.beginPath();
+    for (var gx = 44; gx < w; gx += 44) { ctx.moveTo(gx + .5, 0); ctx.lineTo(gx + .5, h); }
+    for (var gy = 44; gy < h; gy += 44) { ctx.moveTo(0, gy + .5); ctx.lineTo(w, gy + .5); }
+    ctx.stroke();
+    ctx.strokeStyle = 'hsla(' + hue + ',80%,' + (light ? 30 : 62) + '%,' + gridA * 2 + ')';
+    ctx.beginPath();
+    ctx.moveTo(w / 2 + .5, 0); ctx.lineTo(w / 2 + .5, h);
+    ctx.moveTo(0, h / 2 + .5); ctx.lineTo(w, h / 2 + .5);
+    ctx.stroke();
+
+    /* ripples */
+    for (var i = ripples.length - 1; i >= 0; i--) {
+      var rp = ripples[i];
+      if (animate) { rp.r += 3.2; rp.a -= 0.016; }
+      if (rp.a <= 0) { ripples.splice(i, 1); continue; }
+      ctx.strokeStyle = 'hsla(' + hue + ',92%,' + (light ? 38 : 64) + '%,' + rp.a + ')';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    /* pointer trace (scope trace look) */
+    var now = performance.now();
+    for (var j = trail.length - 1; j >= 0; j--) {
+      if (now - trail[j].t > 620) trail.splice(j, 1);
+    }
+    if (trail.length > 1) {
+      ctx.lineCap = 'round';
+      for (var k = 1; k < trail.length; k++) {
+        var age = (now - trail[k].t) / 620;
+        ctx.strokeStyle = 'hsla(' + hue + ',92%,' + (light ? 38 : 66) + '%,' + (0.55 * (1 - age)) + ')';
+        ctx.lineWidth = 2.2 * (1 - age) + 0.4;
+        ctx.beginPath();
+        ctx.moveTo(trail[k - 1].x, trail[k - 1].y);
+        ctx.lineTo(trail[k].x, trail[k].y);
+        ctx.stroke();
+      }
+    }
+
+    /* orb */
+    if (animate) state.orbScale += (state.orbScaleTarget - state.orbScale) * 0.08;
+    var cx = w / 2, cy = h / 2;
+    var baseR = Math.min(w, h) * 0.17;
+    var breathe = state.motion ? Math.sin(t * 0.0011) * 0.035 : 0;
+    var R = baseR * state.orbScale * (1 + state.level * 0.5 + breathe);
+
+    var glow = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.3);
+    glow.addColorStop(0, 'hsla(' + hue + ',92%,' + (light ? 46 : 62) + '%,' + (0.28 + state.level * 0.35) + ')');
+    glow.addColorStop(1, 'hsla(' + hue + ',92%,60%,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(cx - R * 2.3, cy - R * 2.3, R * 4.6, R * 4.6);
+
+    /* spectrum ring — live bins when the mic is on, idle sine otherwise */
+    var n = 48, ang, bin, len;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 2.4;
+    for (var b = 0; b < n; b++) {
+      if (state.micOn && freqData) {
+        bin = freqData[Math.floor(b * 1.6) % freqData.length] / 255;
+      } else {
+        bin = 0.16 + 0.12 * Math.sin(t * 0.002 + b * 0.55) * (state.party ? 1.8 : 1);
+      }
+      len = 4 + bin * (R * 0.6 + state.level * R * 0.5);
+      ang = (b / n) * Math.PI * 2 - Math.PI / 2;
+      var r0 = R + 12;
+      ctx.strokeStyle = 'hsla(' + hue + ',92%,' + (light ? 38 : 66) + '%,' + (0.35 + bin * 0.6) + ')';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
+      ctx.lineTo(cx + Math.cos(ang) * (r0 + len), cy + Math.sin(ang) * (r0 + len));
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'hsla(' + hue + ',92%,' + (light ? 38 : 68) + '%,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.94, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'hsla(' + hue + ',92%,' + (light ? 40 : 66) + '%,' + (0.14 + state.level * 0.4) + ')';
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'hsla(' + hue + ',95%,72%,0.95)';
+    ctx.beginPath(); ctx.arc(cx, cy, Math.max(3, R * 0.07), 0, Math.PI * 2); ctx.fill();
+
+    /* glyph bursts */
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (var q = letters.length - 1; q >= 0; q--) {
+      var p = letters[q];
+      if (animate) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life -= 0.011;
+      }
+      if (p.life <= 0) { letters.splice(q, 1); continue; }
+      ctx.font = '600 ' + Math.round(15 + p.life * 14) + 'px "IBM Plex Mono", monospace';
+      ctx.fillStyle = 'hsla(' + p.hue + ',95%,' + (light ? 36 : 70) + '%,' + p.life + ')';
+      ctx.fillText(p.ch, p.x, p.y);
+    }
+  }
+
+  function loop(t) {
+    sampleAudio();
+    paintScene(t, true);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function drawStatic() {
+    paintScene(performance.now(), false);
+  }
+
+  function setMotion(on) {
+    state.motion = on;
+    document.body.setAttribute('data-motion', on ? 'on' : 'off');
+    el.motionBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) {
+      if (rafId === null) rafId = requestAnimationFrame(loop);
+    } else {
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+      drawStatic();
+    }
+    log('SYS', 'stage motion ' + (on ? 'on' : 'off'));
+  }
+
+  /* ============================================================
+     CHANNEL 01 — KEYBOARD
+     ============================================================ */
+  var BOARD_ROWS = [
+    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+    ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
+    [{ id: 'shift', label: 'SHIFT' }, { id: 'space', label: 'SPACE' },
+     { id: 'bksp', label: 'BKSP' }, { id: 'esc', label: 'ESC' }]
+  ];
+  var BOARD_IDS = new Set();
+
+  function buildBoard() {
+    BOARD_ROWS.forEach(function (row) {
+      var rowEl = document.createElement('div');
+      rowEl.className = 'row';
+      row.forEach(function (k) {
+        var cap = document.createElement('div');
+        cap.className = 'cap';
+        if (typeof k === 'object') {
+          cap.classList.add('wide');
+          cap.dataset.key = k.id;
+          cap.textContent = k.label;
+          BOARD_IDS.add(k.id);
+        } else {
+          cap.dataset.key = k;
+          cap.textContent = k;
+          BOARD_IDS.add(k);
+        }
+        rowEl.appendChild(cap);
+      });
+      el.caps.appendChild(rowEl);
+    });
+  }
+
+  function capId(k) {
+    if (k === ' ') return 'space';
+    if (k.length === 1) return k.toLowerCase();
+    var map = { Backspace: 'bksp', Escape: 'esc', Shift: 'shift', CapsLock: 'caps',
+                Enter: 'enter', Tab: 'tab', ArrowUp: 'up', ArrowDown: 'down',
+                ArrowLeft: 'left', ArrowRight: 'right' };
+    return map[k] || null;
+  }
+
+  function prettyKey(k, upper) {
+    if (k === ' ') return 'SPACE';
+    if (k.length === 1) return upper ? k.toUpperCase() : k;
+    var map = { Backspace: 'BKSP', Escape: 'ESC', Shift: 'SHIFT', CapsLock: 'CAPS',
+                Enter: 'ENTER', Tab: 'TAB', ArrowUp: 'UP', ArrowDown: 'DOWN',
+                ArrowLeft: 'LEFT', ArrowRight: 'RIGHT' };
+    return map[k] || k.toUpperCase();
+  }
+
+  function highlightCap(id) {
+    if (!id || !BOARD_IDS.has(id)) return;
+    var cap = el.caps.querySelector('[data-key="' + id + '"]');
+    if (!cap) return;
+    cap.classList.add('active');
+    setTimeout(function () { cap.classList.remove('active'); }, 150);
+  }
+
+  function tapePush(label) {
+    var ph = el.tape.querySelector('.placeholder');
+    if (ph) ph.remove();
+    var chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = label;
+    el.tape.prepend(chip);
+    while (el.tape.children.length > 12) el.tape.lastChild.remove();
+  }
+
+  function updateModifiers(e) {
+    var shift = e.shiftKey;
+    var caps = false;
+    try { caps = e.getModifierState && e.getModifierState('CapsLock'); } catch (err) {}
+    el.pillShift.classList.toggle('on', shift);
+    el.pillCaps.classList.toggle('on', caps);
+    el.caps.classList.toggle('shifted', shift);
+    el.caps.classList.toggle('capslock', caps);
+    return { shift: shift, caps: caps };
+  }
+
+  window.addEventListener('keydown', function (e) {
+    var mods = updateModifiers(e);
+    var tag = (e.target && e.target.tagName) || '';
+    var onControl = /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(tag);
+    if (!onControl && [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '/'].indexOf(e.key) !== -1) {
+      e.preventDefault();
+    }
+
+    var id = capId(e.key);
+    highlightCap(id);
+
+    /* record */
+    state.keys++;
+    state.keyTimes.push(performance.now());
+    if (state.keyTimes.length > 400) state.keyTimes.shift();
+
+    var upper = mods.shift || mods.caps;
+    var shown = prettyKey(e.key, upper);
+    el.kbLast.textContent = shown;
+    el.kbLive.textContent = 'last key ' + shown;
+
+    if (e.key === 'Backspace') {
+      var lastChip = el.tape.lastElementChild;
+      if (lastChip) lastChip.remove();
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      tapePush(e.key === ' ' ? 'SPACE' : (upper ? e.key.toUpperCase() : e.key));
+      stage.burst(upper ? e.key.toUpperCase() : e.key);
+    }
+
+    if (e.key === 'Escape') {
+      stage.clear();
+      flash('STAGE CLEARED');
+      hud('KEY', 'ESC — stage cleared');
+      log('KEY', 'ESC — stage cleared');
+    } else {
+      hud('KEY', shown);
+      log('KEY', shown);
+    }
+
+    pulseLamp(el.lampKbd);
+    updateFoot();
+  });
+
+  window.addEventListener('keyup', function (e) {
+    updateModifiers(e);
+    var id = capId(e.key);
+    if (id) highlightCap(id);
+  });
+  window.addEventListener('blur', function () {
+    el.pillShift.classList.remove('on');
+    el.caps.classList.remove('shifted');
+  });
+
+  function kpm() {
+    var now = performance.now();
+    while (state.keyTimes.length && now - state.keyTimes[0] > 15000) state.keyTimes.shift();
+    return Math.round(state.keyTimes.length * 4);
+  }
+
+  /* ============================================================
+     CHANNEL 02 — POINTER
+     ============================================================ */
+  var ptr = { x: 0, y: 0, vx: 0, vy: 0, vel: 0, lastT: 0, lastMove: 0, lastDom: 0, idleTimer: 0 };
+  var lastTrail = { x: -99, y: -99 };
+
+  function wakePointer() {
+    document.body.classList.remove('pointer-idle');
+    if (ptr.idleTimer) clearTimeout(ptr.idleTimer);
+    ptr.idleTimer = setTimeout(function () {
+      document.body.classList.add('pointer-idle');
+    }, 2200);
+  }
+
+  window.addEventListener('pointermove', function (e) {
+    var now = performance.now();
+    var dt = now - ptr.lastT;
+    if (dt > 0 && dt < 200 && ptr.lastT) {
+      var d = Math.hypot(e.clientX - ptr.x, e.clientY - ptr.y);
+      ptr.vel = ptr.vel * 0.55 + (d / dt * 1000) * 0.45;
+    }
+    ptr.x = e.clientX; ptr.y = e.clientY; ptr.lastT = now; ptr.lastMove = now;
+    wakePointer();
+
+    /* spotlight follows the pointer */
+    root.style.setProperty('--mx', e.clientX + 'px');
+    root.style.setProperty('--my', e.clientY + 'px');
+
+    /* stage trace */
+    var local = stageLocal(e.clientX, e.clientY);
+    if (local.inside && Math.hypot(e.clientX - lastTrail.x, e.clientY - lastTrail.y) > 7) {
+      stage.pushTrail(local.x, local.y);
+      lastTrail = { x: e.clientX, y: e.clientY };
+    }
+
+    /* pad dot + readouts (throttled) */
+    el.padDot.style.left = (e.clientX / window.innerWidth * 100).toFixed(2) + '%';
+    el.padDot.style.top = (e.clientY / window.innerHeight * 100).toFixed(2) + '%';
+    if (now - ptr.lastDom > 90) {
+      ptr.lastDom = now;
+      el.ptPos.textContent = Math.round(e.clientX) + ' , ' + Math.round(e.clientY);
+      el.ptVel.textContent = Math.round(ptr.vel) + ' px/s';
+      el.ptMeter.firstElementChild.style.width = Math.min(100, ptr.vel / 30) + '%';
+      el.ptLive.textContent = Math.round(ptr.vel) + ' px/s';
+    }
+  }, { passive: true });
+
+  window.addEventListener('pointerdown', function (e) {
+    var onControl = e.target.closest && e.target.closest('button, a, input, textarea, select');
+    var local = stageLocal(e.clientX, e.clientY);
+    if (local.inside) {
+      stage.ripple(local.x, local.y);
+      hud('POINTER', 'click @ ' + Math.round(local.x) + ' , ' + Math.round(local.y));
+      log('PTR', 'click @ ' + Math.round(e.clientX) + ' , ' + Math.round(e.clientY));
+    }
+    if (!onControl) {
+      state.clicks++;
+      el.ptClicks.textContent = state.clicks;
+      el.padDot.classList.remove('clicking');
+      void el.padDot.offsetWidth;
+      el.padDot.classList.add('clicking');
+      pulseLamp(el.lampPtr);
+      updateFoot();
+    }
+  });
+
+  /* ============================================================
+     CHANNEL 03 — VOICE (volume → visuals, speech → commands)
+     ============================================================ */
+  var audioCtx = null, analyser = null, micStream = null;
+  var timeData = null, freqData = null;
+  var rec = null, recSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  var specCv = $('spectrum'), specCtx = specCv.getContext('2d');
+
+  function resizeSpectrum() {
+    var r = specCv.getBoundingClientRect();
+    var d = Math.min(window.devicePixelRatio || 1, 2);
+    specCv.width = Math.max(1, Math.round(r.width * d));
+    specCv.height = Math.max(1, Math.round(r.height * d));
+    specCtx.setTransform(d, 0, 0, d, 0, 0);
+  }
+
+  function sampleAudio() {
+    if (!state.micOn || !analyser) return;
+    analyser.getByteTimeDomainData(timeData);
+    var sum = 0;
+    for (var i = 0; i < timeData.length; i++) {
+      var v = (timeData[i] - 128) / 128;
+      sum += v * v;
+    }
+    var rms = Math.sqrt(sum / timeData.length);
+    var live = Math.min(1, rms * 3.2);
+    state.level = live > state.level ? live : state.level * 0.88;
+    analyser.getByteFrequencyData(freqData);
+    drawSpectrum();
+  }
+
+  function drawSpectrum() {
+    var w = specCv.getBoundingClientRect().width, h = 46;
+    specCtx.clearRect(0, 0, w, h);
+    var hue = state.accentH;
+    var light = state.theme === 'light';
+    var n = 44, gap = 2, bw = (w - gap * (n - 1)) / n;
+    for (var i = 0; i < n; i++) {
+      var v;
+      if (state.micOn && freqData) v = freqData[Math.floor(i * 2.1) % freqData.length] / 255;
+      else v = 0.04;
+      var bh = Math.max(2, v * (h - 8));
+      specCtx.fillStyle = 'hsla(' + hue + ',90%,' + (light ? 36 : 64) + '%,' + (0.3 + v * 0.7) + ')';
+      specCtx.fillRect(i * (bw + gap), h - 4 - bh, bw, bh);
+    }
+    if (!state.micOn) {
+      specCtx.fillStyle = 'hsla(' + hue + ',60%,' + (light ? 30 : 60) + '%,0.35)';
+      specCtx.fillRect(0, h - 5, w, 1);
+    }
+  }
+
+  function setMicUI(mode) {
+    var states = {
+      off:         ['MIC OFF', 'enable the mic — volume drives the orb, speech runs commands', 'mic off', false],
+      requesting:  ['REQUESTING…', 'waiting for microphone permission', 'requesting…', false],
+      listening:   ['LISTENING', recSupported
+                     ? 'speak a command — try “green”, “party”, “light”, “clear”'
+                     : 'speech recognition unavailable in this browser — use the command chips below',
+                     'listening', true],
+      denied:      ['MIC BLOCKED', 'permission denied — allow the microphone in the browser site settings, then try again', 'blocked', false],
+      nomic:       ['NO MICROPHONE', 'no input device found on this machine', 'no device', false],
+      failed:      ['MIC UNAVAILABLE', 'could not open the microphone — try reloading or use a Chromium browser', 'error', false]
+    };
+    var s = states[mode] || states.off;
+    el.micState.textContent = s[0];
+    el.micHint.textContent = s[1];
+    el.vxLive.textContent = s[2];
+    el.micBtn.setAttribute('aria-pressed', s[3] ? 'true' : 'false');
+    el.micBtn.classList.toggle('on', s[3]);
+    el.micBtn.setAttribute('aria-label', s[3] ? 'Disable microphone' : 'Enable microphone');
+    el.lampVox.classList.toggle('on', s[3]);
+  }
+
+  async function enableMic() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMicUI('failed'); log('VOX', 'microphone API unavailable');
+      return;
+    }
+    setMicUI('requesting');
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var src = audioCtx.createMediaStreamSource(micStream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.72;
+      src.connect(analyser);
+      timeData = new Uint8Array(analyser.fftSize);
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      state.micOn = true;
+      setMicUI('listening');
+      log('VOX', 'microphone on — listening');
+      flash('MIC LIVE');
+      startRecognition();
+      if (!state.motion) drawStatic();
+    } catch (err) {
+      micStream = null;
+      var mode = err && err.name === 'NotAllowedError' ? 'denied'
+               : err && err.name === 'NotFoundError' ? 'nomic' : 'failed';
+      setMicUI(mode);
+      log('VOX', 'microphone failed: ' + (err && err.name ? err.name : 'unknown'));
+    }
+  }
+
+  function disableMic(manual) {
+    state.micOn = false; state.level = 0;
+    if (rec) { try { rec.onend = null; rec.stop(); } catch (e) {} rec = null; }
+    if (micStream) { micStream.getTracks().forEach(function (t) { t.stop(); }); micStream = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+    analyser = null; freqData = null;
+    setMicUI('off');
+    drawSpectrum();
+    if (!state.motion) drawStatic();
+    if (manual) log('VOX', 'microphone off');
+  }
+
+  function startRecognition() {
+    if (!recSupported) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    try {
+      rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+      rec.onresult = function (ev) {
+        var interim = '', finalText = '';
+        for (var i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) finalText += ev.results[i][0].transcript;
+          else interim += ev.results[i][0].transcript;
+        }
+        if (interim) {
+          el.transcript.innerHTML = '';
+          var it = document.createElement('span');
+          it.className = 'interim';
+          it.textContent = interim.trim();
+          el.transcript.appendChild(it);
+        }
+        if (finalText) handleUtterance(finalText.trim());
+      };
+      rec.onerror = function (ev) {
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          setMicUI('denied');
+          log('VOX', 'speech recognition blocked');
+          disableMic(false);
+        } else if (ev.error === 'audio-capture') {
+          setMicUI('nomic');
+          log('VOX', 'no capture device for speech');
+        }
+        /* 'no-speech' and 'aborted' are recovered in onend */
+      };
+      rec.onend = function () {
+        if (state.micOn) {
+          setTimeout(function () {
+            if (state.micOn && rec) { try { rec.start(); } catch (e) {} }
+          }, 250);
+        }
+      };
+      rec.start();
+    } catch (e) {
+      rec = null;
+    }
+  }
+
+  function handleUtterance(text) {
+    el.transcript.textContent = '“' + text + '”';
+    hud('VOX', '“' + text + '”');
+    log('VOX', 'heard “' + text + '”');
+    var words = text.toLowerCase().match(/[a-z]+/g) || [];
+    var matched = 0;
+    words.forEach(function (w) { if (runCommand(w)) matched++; });
+    if (!matched) log('VOX', 'no command in phrase');
+  }
+
+  el.micBtn.addEventListener('click', function () {
+    if (state.micOn) disableMic(true); else enableMic();
+  });
+
+  /* ---------- command chips ---------- */
+  var CHIP_CMDS = ['red', 'green', 'blue', 'cyan', 'pink', 'purple',
+                   'dark', 'light', 'party', 'calm', 'clear', 'big', 'small', 'normal', 'reset'];
+  CHIP_CMDS.forEach(function (cmd) {
+    var b = document.createElement('button');
+    b.className = 'cmd';
+    b.type = 'button';
+    b.textContent = cmd.toUpperCase();
+    b.addEventListener('click', function () {
+      if (runCommand(cmd)) {
+        hud('VOX', 'chip: ' + cmd);
+        pulseLamp(el.lampVox);
+      }
+    });
+    el.chips.appendChild(b);
+  });
+
+  /* ============================================================
+     TOP-BAR CONTROLS + MASTER TICK
+     ============================================================ */
+  el.themeBtn.addEventListener('click', function () {
+    setTheme(state.theme === 'dark' ? 'light' : 'dark');
+  });
+  el.motionBtn.addEventListener('click', function () {
+    setMotion(!state.motion);
+  });
+
+  window.addEventListener('resize', function () {
+    resizeStage(); resizeSpectrum(); drawSpectrum();
+  });
+
+  /* keep canvas coordinate mapping accurate while scrolling */
+  window.addEventListener('scroll', function () {
+    var r = stageWrap.getBoundingClientRect();
+    rect.left = r.left; rect.top = r.top;
+    rect.width = r.width; rect.height = r.height;
+  }, { passive: true });
+
+  setInterval(function () {
+    /* velocity decay + idle */
+    var now = performance.now();
+    if (now - ptr.lastMove > 90) {
+      ptr.vel *= 0.86;
+      if (ptr.vel < 2) ptr.vel = 0;
+      el.ptVel.textContent = Math.round(ptr.vel) + ' px/s';
+      el.ptLive.textContent = Math.round(ptr.vel) + ' px/s';
+      el.ptMeter.firstElementChild.style.width = Math.min(100, ptr.vel / 30) + '%';
+      el.ptMeter.setAttribute('aria-valuenow', Math.round(ptr.vel));
+    }
+    el.lampPtr.classList.toggle('on', ptr.vel > 80);
+
+    /* keyboard rate */
+    el.kbKpm.textContent = kpm();
+
+    /* mic level meter */
+    var pct = Math.round(state.level * 100);
+    el.vxMeter.firstElementChild.style.width = pct + '%';
+    el.vxMeter.setAttribute('aria-valuenow', pct);
+
+    
+    /* gamepad poll */
+    if (state.gpActive) {
+      var gps = navigator.getGamepads ? navigator.getGamepads() : [];
+      var gp = gps[0];
+      if (gp) {
+        var ax = gp.axes[0] || 0;
+        var ay = gp.axes[1] || 0;
+        el.gpAxes.textContent = ax.toFixed(2) + ' , ' + ay.toFixed(2);
+        
+        el.gpDot.style.left = (50 + ax * 50) + '%';
+        el.gpDot.style.top = (50 + ay * 50) + '%';
+        
+        var activeBtns = 0;
+        gp.buttons.forEach((b) => {
+           if(b.pressed) activeBtns++;
+        });
+        el.gpBtns.textContent = activeBtns;
+        
+        if (Math.abs(ax) > 0.1 || Math.abs(ay) > 0.1 || activeBtns > 0) {
+            pulseLamp(el.lampPad, 100);
+            el.gpMeter.firstElementChild.style.width = Math.min(100, Math.max(Math.abs(ax), Math.abs(ay)) * 100) + '%';
+        } else {
+            el.gpMeter.firstElementChild.style.width = '0%';
+        }
+      }
+    }
+
+    /* keep spectrum alive when the big loop is paused */
+    if (!state.motion && state.micOn) { sampleAudio(); }
+  }, 120);
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  buildBoard();
+  resizeStage();
+  resizeSpectrum();
+  drawSpectrum();
+  updateFoot();
+  setMicUI('off');
+  applyAccent();
+
+  if (reducedMotion) {
+    /* respect the OS-level preference; the user can opt back in */
+    setMotion(false);
+    el.motionBtn.setAttribute('aria-pressed', 'false');
+  } else {
+    rafId = requestAnimationFrame(loop);
+  }
+  drawStatic();
+
+  log('SYS', 'bench ready — type, move, click or speak');
+  hud('SYS', 'bench ready — awaiting input');
+})();
+</script>
+</body>
+</html>
