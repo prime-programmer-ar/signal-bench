@@ -663,6 +663,7 @@ body[data-motion="off"] .rise { opacity: 1; }
   <!-- ================= MAIN GRID ================= -->
   <main class="grid">
 
+    <div class="left-col" style="display: flex; flex-direction: column; gap: 18px;">
     <!-- ---------- STAGE ---------- -->
     <section class="stage-wrap rise rise-2" data-section="stage" aria-label="Live input stage">
       <canvas id="stage" aria-hidden="true"></canvas>
@@ -680,6 +681,58 @@ body[data-motion="off"] .rise { opacity: 1; }
       </div>
     </section>
 
+
+      <div class="bottom-modules" style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+      <!-- EYE TRACKING -->
+      <section class="module rise rise-4" data-section="vision" aria-label="Vision instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">04</span>VISION</h2>
+          <span class="live" id="eye-live">cam off</span>
+        </div>
+
+        <div class="duo">
+          <div class="readout">
+            <div class="kv"><span>GAZE X,Y</span><b id="eye-pos">— , —</b></div>
+            <div class="kv"><span>STATUS</span><b id="eye-status">OFF</b></div>
+            <div style="margin-top:8px;">
+              <button class="btn" id="eye-btn">ENABLE CAM</button>
+            </div>
+          </div>
+          <div class="pad" aria-hidden="true" id="eye-pad" style="display:flex;justify-content:center;align-items:center;">
+             <span class="pad-dot" id="eye-dot"></span>
+          </div>
+        </div>
+
+        <div class="mod-row">
+          <span class="mod-note">look around the screen to drive the gaze dot</span>
+        </div>
+      </section>
+
+      <!-- GAMEPAD -->
+      <section class="module rise rise-4" data-section="gamepad" aria-label="Gamepad instrument">
+        <div class="module-head">
+          <h2 class="module-title"><span class="idx">05</span>GAMEPAD</h2>
+          <span class="live" id="gp-live">disconnected</span>
+        </div>
+        <div class="duo">
+          <div class="readout">
+            <div class="kv"><span>AXIS X,Y</span><b id="gp-axes">0 , 0</b></div>
+            <div class="kv"><span>BUTTONS</span><b id="gp-btns">0</b></div>
+            <div>
+              <div class="meter" role="meter" id="gp-meter"><i></i></div>
+            </div>
+          </div>
+          <div class="pad" aria-hidden="true">
+            <span class="pad-dot" id="gp-dot"></span>
+          </div>
+        </div>
+        <div class="mod-row">
+          <span class="mod-note">connect a controller, press any button</span>
+        </div>
+      </section>
+
+      </div>
+    </div>
     <!-- ---------- RIGHT RAIL ---------- -->
     <div class="rail">
 
@@ -765,55 +818,7 @@ body[data-motion="off"] .rise { opacity: 1; }
         <div class="chips" id="chips" role="group" aria-labelledby="cmds-label"></div>
       </section>
 
-            <!-- EYE TRACKING -->
-      <section class="module rise rise-4" data-section="vision" aria-label="Vision instrument">
-        <div class="module-head">
-          <h2 class="module-title"><span class="idx">04</span>VISION</h2>
-          <span class="live" id="eye-live">cam off</span>
-        </div>
-
-        <div class="duo">
-          <div class="readout">
-            <div class="kv"><span>GAZE X,Y</span><b id="eye-pos">— , —</b></div>
-            <div class="kv"><span>STATUS</span><b id="eye-status">OFF</b></div>
-            <div style="margin-top:8px;">
-              <button class="btn" id="eye-btn">ENABLE CAM</button>
-            </div>
-          </div>
-          <div class="pad" aria-hidden="true" id="eye-pad" style="display:flex;justify-content:center;align-items:center;">
-             <span class="pad-dot" id="eye-dot"></span>
-          </div>
-        </div>
-
-        <div class="mod-row">
-          <span class="mod-note">look around the screen to drive the gaze dot</span>
-        </div>
-      </section>
-
-      <!-- GAMEPAD -->
-      <section class="module rise rise-4" data-section="gamepad" aria-label="Gamepad instrument">
-        <div class="module-head">
-          <h2 class="module-title"><span class="idx">05</span>GAMEPAD</h2>
-          <span class="live" id="gp-live">disconnected</span>
-        </div>
-        <div class="duo">
-          <div class="readout">
-            <div class="kv"><span>AXIS X,Y</span><b id="gp-axes">0 , 0</b></div>
-            <div class="kv"><span>BUTTONS</span><b id="gp-btns">0</b></div>
-            <div>
-              <div class="meter" role="meter" id="gp-meter"><i></i></div>
-            </div>
-          </div>
-          <div class="pad" aria-hidden="true">
-            <span class="pad-dot" id="gp-dot"></span>
-          </div>
-        </div>
-        <div class="mod-row">
-          <span class="mod-note">connect a controller, press any button</span>
-        </div>
-      </section>
-
-      <!-- EVENT LOG -->
+            <!-- EVENT LOG -->
       <section class="module rise rise-5" data-section="log" aria-label="Event log">
         <div class="module-head">
           <h2 class="module-title"><span class="idx">06</span>EVENT LOG</h2>
