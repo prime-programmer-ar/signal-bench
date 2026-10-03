@@ -11,89 +11,6 @@
 <style>
 
   /* ============================================================
-     CHANNEL 04 — EYE TRACKING
-     ============================================================ */
-  var gazeActive = false;
-  el.eyeBtn.addEventListener('click', async function() {
-    if (gazeActive) {
-      if (window.webgazer) {
-        window.webgazer.pause();
-        window.webgazer.showVideoPreview(false);
-        window.webgazer.showPredictionPoints(false);
-      }
-      gazeActive = false;
-      state.eyeOn = false;
-      el.eyeStatus.textContent = 'OFF';
-      el.eyeLive.textContent = 'cam off';
-      el.eyeBtn.textContent = 'ENABLE CAM';
-      log('EYE', 'gaze tracking paused');
-      setMicUI(state.micOn ? 'listening' : 'off');
-      return;
-    }
-    
-    if (!window.webgazer) {
-      log('EYE', 'webgazer not loaded');
-      return;
-    }
-
-    try {
-      el.eyeStatus.textContent = 'INIT...';
-      await window.webgazer.setRegression('ridge')
-        .setGazeListener(function(data, elapsedTime) {
-          if (data == null) return;
-          var x = data.x;
-          var y = data.y;
-          
-          el.eyePos.textContent = Math.round(x) + ' , ' + Math.round(y);
-          
-          var padRect = el.eyePad.getBoundingClientRect();
-          var px = (x / window.innerWidth) * 100;
-          var py = (y / window.innerHeight) * 100;
-          el.eyeDot.style.left = px + '%';
-          el.eyeDot.style.top = py + '%';
-          
-          if (Math.random() < 0.03) {
-             var local = stageLocal(x, y);
-             if (local.inside) {
-                stage.ripple(local.x, local.y);
-             }
-          }
-          pulseLamp(el.lampEye, 100);
-        })
-        .begin();
-        
-      window.webgazer.showVideoPreview(false).showPredictionPoints(false);
-      gazeActive = true;
-      state.eyeOn = true;
-      el.eyeStatus.textContent = 'TRACKING';
-      el.eyeLive.textContent = 'cam active';
-      el.eyeBtn.textContent = 'DISABLE CAM';
-      log('EYE', 'gaze tracking started');
-      flash('EYE TRACKING ON');
-    } catch(err) {
-      console.error(err);
-      el.eyeStatus.textContent = 'ERROR';
-      log('EYE', 'failed to init webgazer');
-    }
-  });
-
-  /* ============================================================
-     CHANNEL 05 — GAMEPAD
-     ============================================================ */
-  window.addEventListener("gamepadconnected", (e) => {
-    state.gpActive = true;
-    el.gpLive.textContent = e.gamepad.id.substring(0, 15) + '...';
-    log('PAD', 'gamepad connected: ' + e.gamepad.id);
-    flash('GAMEPAD CONNECTED');
-  });
-
-  window.addEventListener("gamepaddisconnected", (e) => {
-    state.gpActive = false;
-    el.gpLive.textContent = 'disconnected';
-    log('PAD', 'gamepad disconnected');
-  });
-
-  /* ============================================================
    SIGNAL BENCH · design tokens
    Palette territory: warm instrument bench — charcoal, warm paper
    ink, signal amber. No default indigo/purple, no stock gradients.
@@ -1780,6 +1697,89 @@ body[data-motion="off"] .rise { opacity: 1; }
     /* keep spectrum alive when the big loop is paused */
     if (!state.motion && state.micOn) { sampleAudio(); }
   }, 120);
+
+  /* ============================================================
+     CHANNEL 04 — EYE TRACKING
+     ============================================================ */
+  var gazeActive = false;
+  el.eyeBtn.addEventListener('click', async function() {
+    if (gazeActive) {
+      if (window.webgazer) {
+        window.webgazer.pause();
+        window.webgazer.showVideoPreview(false);
+        window.webgazer.showPredictionPoints(false);
+      }
+      gazeActive = false;
+      state.eyeOn = false;
+      el.eyeStatus.textContent = 'OFF';
+      el.eyeLive.textContent = 'cam off';
+      el.eyeBtn.textContent = 'ENABLE CAM';
+      log('EYE', 'gaze tracking paused');
+      setMicUI(state.micOn ? 'listening' : 'off');
+      return;
+    }
+    
+    if (!window.webgazer) {
+      log('EYE', 'webgazer not loaded');
+      return;
+    }
+
+    try {
+      el.eyeStatus.textContent = 'INIT...';
+      await window.webgazer.setRegression('ridge')
+        .setGazeListener(function(data, elapsedTime) {
+          if (data == null) return;
+          var x = data.x;
+          var y = data.y;
+          
+          el.eyePos.textContent = Math.round(x) + ' , ' + Math.round(y);
+          
+          var padRect = el.eyePad.getBoundingClientRect();
+          var px = (x / window.innerWidth) * 100;
+          var py = (y / window.innerHeight) * 100;
+          el.eyeDot.style.left = px + '%';
+          el.eyeDot.style.top = py + '%';
+          
+          if (Math.random() < 0.03) {
+             var local = stageLocal(x, y);
+             if (local.inside) {
+                stage.ripple(local.x, local.y);
+             }
+          }
+          pulseLamp(el.lampEye, 100);
+        })
+        .begin();
+        
+      window.webgazer.showVideoPreview(false).showPredictionPoints(false);
+      gazeActive = true;
+      state.eyeOn = true;
+      el.eyeStatus.textContent = 'TRACKING';
+      el.eyeLive.textContent = 'cam active';
+      el.eyeBtn.textContent = 'DISABLE CAM';
+      log('EYE', 'gaze tracking started');
+      flash('EYE TRACKING ON');
+    } catch(err) {
+      console.error(err);
+      el.eyeStatus.textContent = 'ERROR';
+      log('EYE', 'failed to init webgazer');
+    }
+  });
+
+  /* ============================================================
+     CHANNEL 05 — GAMEPAD
+     ============================================================ */
+  window.addEventListener("gamepadconnected", (e) => {
+    state.gpActive = true;
+    el.gpLive.textContent = e.gamepad.id.substring(0, 15) + '...';
+    log('PAD', 'gamepad connected: ' + e.gamepad.id);
+    flash('GAMEPAD CONNECTED');
+  });
+
+  window.addEventListener("gamepaddisconnected", (e) => {
+    state.gpActive = false;
+    el.gpLive.textContent = 'disconnected';
+    log('PAD', 'gamepad disconnected');
+  });
 
   /* ============================================================
      INIT
